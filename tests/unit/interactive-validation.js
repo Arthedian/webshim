@@ -26,59 +26,59 @@
 		counters.focused = [];
 		
 		$(document)
-			.bind('invalid.clicktest', function(){
+			.on('invalid.clicktest', function(){
 				counters.boundDocumentInvalids++;
 			})
-			.bind('firstinvalid.clicktest', function(){
+			.on('firstinvalid.clicktest', function(){
 				counters.boundDocumentFirstInvalids++;
 			})
-			.bind('submit.clicktest', function(){
+			.on('submit.clicktest', function(){
 				counters.boundDocumentSubmit++;
 				
 			})
 		;
 		
 		$(document)
-			.delegate('input', 'invalid.clicktest', function(){
+			.on('invalid.clicktest', 'input', function(){
 				counters.delegatedDocumentInvalids++;
 			})
-			.delegate('input', 'firstinvalid.clicktest', function(){
+			.on('firstinvalid.clicktest', 'input', function(){
 				counters.delegatedDocumentFirstInvalids++;
 			})
-			.delegate('form', 'submit.clicktest', function(){
+			.on('submit.clicktest', 'form', function(){
 				counters.delegatedDocumentSubmit++;
 			})
 		;
 		$('#click-test-form')
-			.bind('invalid.clicktest', function(){
+			.on('invalid.clicktest', function(){
 				counters.boundFormInvalids++;
 			})
-			.bind('firstinvalid.clicktest', function(){
+			.on('firstinvalid.clicktest', function(){
 				counters.boundFormFirstInvalids++;
 			})
-			.bind('submit.clicktest', function(e){
+			.on('submit.clicktest', function(e){
 				counters.boundFormSubmit++;
 				e.preventDefault();
 			})
-			.delegate('*', 'invalid.clicktest', function(){
+			.on('invalid.clicktest', function(){
 				counters.delegatedFormInvalids++;
 			})
-			.delegate('*', 'firstinvalid.clicktest', function(){
+			.on('firstinvalid.clicktest', function(){
 				counters.delegatedFormFirstInvalids++;
 				setTimeout(function(){
 					counters.focused.push(document.activeElement);
 				}, 20);
 				counters.focused.push(document.activeElement);
 			})
-			.bind('focusin', function(e){
+			.on('focusin', function(e){
 				counters.focused.push(e.target);
 			})
 		;
 		$('#click-test-form input:not([type="submit"])')
-			.bind('invalid.clicktest', function(){
+			.on('invalid.clicktest', function(){
 				counters.boundInvalids++;
 			})
-			.bind('firstinvalid.clicktest', function(e){
+			.on('firstinvalid.clicktest', function(e){
 				counters.boundFirstInvalids++;
 			})
 		;
@@ -153,6 +153,20 @@
 		}, 0);
 	});
 	
+	test("fieldset[disabled] test 1 invalid", function(){
+		stop();
+		var counters = setupClickTest();
+		setTimeout(function(){
+			$('#click-test-form fieldset').prop('disabled', true);
+			$('#click-test-form input[type="submit"]').trigger('click');
+			setTimeout(function(){
+				testClickTest(counters, {firstinvalid: 1, invalid: 1, submit: 0, focus: $('#click-test-form input').eq(2).getShadowFocusElement()[0]});
+				setTimeout(start, 50);
+			}, 40);
+		}, 0);
+	});
+	
+	
 	test("click test all valid", function(){
 		stop();
 		var counters = setupClickTest();
@@ -170,7 +184,7 @@
 		stop();
 		var counters = setupClickTest();
 		setTimeout(function(){
-			$('#click-test-form').bind('invalid', function(e){
+			$('#click-test-form').on('invalid', function(e){
 				e.preventDefault();
 			});
 			$('#click-test-form input[type="submit"]').trigger('click');
@@ -185,7 +199,7 @@
 		stop();
 		var counters = setupClickTest();
 		setTimeout(function(){
-			$('#click-test-form').bind('firstinvalid', function(e){
+			$('#click-test-form').on('firstinvalid', function(e){
 				e.preventDefault();
 			});
 			$('#click-test-form input[type="submit"]').trigger('click');

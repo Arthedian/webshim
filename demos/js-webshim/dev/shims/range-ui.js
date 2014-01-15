@@ -18,7 +18,7 @@
 			
 			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb" /></span>');
 			this.trail = $('.ws-range-track', this.element);
-			this.range = $('.ws-range-progress ', this.element);
+			this.range = $('.ws-range-progress', this.element);
 			this.thumb = $('.ws-range-thumb', this.trail);
 			
 			this.updateMetrics();
@@ -38,7 +38,7 @@
 		},
 		value: $.noop,
 		_value: function(val, _noNormalize, animate){
-			var left, posDif;
+			var left, posDif, textValue;
 			var o = this.options;
 			var oVal = val;
 			var thumbStyle = {};
@@ -55,8 +55,11 @@
 			
 			if(this._init && val == o.value && oVal == val){return;}
 			this.options.value = val;
-			this.thumb.stop();
-			this.range.stop();
+			
+			if($.fn.stop){
+				this.thumb.stop();
+				this.range.stop();
+			}
 			
 			rangeStyle[this.dirs.width] = left+'%';
 			if(this.vertical){
@@ -65,7 +68,7 @@
 			thumbStyle[this.dirs.left] = left+'%';
 			
 			
-			if(!animate){
+			if(!animate || !$.fn.animate){
 				this.thumb.css(thumbStyle);
 				this.range.css(rangeStyle);
 			} else {
@@ -84,9 +87,15 @@
 			if(this.orig && (oVal != val || (!this._init && this.orig.value != val)) ){
 				this.options._change(val);
 			}
+			
+			textValue = this.options.textValue ? this.options.textValue(this.options.value) : this.options.options[this.options.value] || this.options.value;
 			this.element.attr({
 				'aria-valuenow': this.options.value,
-				'aria-valuetext': this.options.textValue ? this.options.textValue(this.options.value) : this.options.options[this.options.value] || this.options.value
+				'aria-valuetext': textValue
+			});
+			this.thumb.attr({
+				'data-value': this.options.value,
+				'data-valuetext': textValue
 			});
 		},
 		initDataList: function(){
@@ -130,13 +139,19 @@
 			$.each(o.options, function(val, label){
 				if(!isNumber(val) || val < min || val > max){return;}
 				var left = 100 * ((val - min) / (max - min));
-				var title = o.showLabels && label ? ' title="'+ label +'"' : '';
+				var attr = '';
+				if(label){
+					attr += 'data-label="'+label+'"';
+					if(o.showLabels){
+						attr += ' title="'+label+'"';
+					}
+				}
 				if(that.vertical){
 					left = Math.abs(left - 100);
 				}
 				
 				that.posCenter(
-					$('<span class="ws-range-ticks"'+ title +' data-label="'+label+'" style="'+(that.dirs.left)+': '+left+'%;" />').appendTo(trail)
+					$('<span class="ws-range-ticks"'+ attr +' style="'+(that.dirs.left)+': '+left+'%;" />').appendTo(trail)
 				);
 			});
 		},
@@ -354,9 +369,9 @@
 				$(window).off('blur', removeWin);
 				if(!o.readonly && !o.disabled){
 					normalizeTouch(e);
-					that.element.focus();
+					that.element.trigger('focus');
 					that.addRemoveClass('ws-active', true);
-					leftOffset = that.element.focus().offset();
+					leftOffset = that.element.offset();
 					widgetUnits = that.element[that.dirs.innerWidth]();
 					if(!widgetUnits || !leftOffset){return;}
 					outerWidth = that.thumb[that.dirs.outerWidth]();
@@ -545,11 +560,6 @@
 		});
 	};
 	if(window.webshims && webshims.isReady){
-		webshims.ready('es5', function(){
-			webshims.isReady('range-ui', true);
-		});
-		if(webshims._polyfill){
-			 webshims._polyfill(['es5']);
-		}
+		webshims.isReady('range-ui', true);
 	}
 })(window.webshims ? webshims.$ : jQuery);

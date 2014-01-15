@@ -449,8 +449,7 @@ var swfmini = function() {
 		}
 	};
 }();
-
-(function(Modernizr, webshims){
+;(function(Modernizr, webshims){
 	"use strict";
 	var $ = webshims.$;
 	var hasNative = Modernizr.audio && Modernizr.video;
@@ -495,7 +494,7 @@ var swfmini = function() {
 			var switchOptions = function(e){
 				var media, error, parent;
 				if(!options.preferFlash && 
-				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source:last', parent)[0] == e.target)) && 
+				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source', parent).last()[0] == e.target)) && 
 				(media = $(e.target).closest('audio, video')) && (error = media.prop('error')) && !noSwitch[error.code]
 				){
 					
@@ -588,7 +587,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			src.server = tmp;
 		}
 		
-		tmp = elem.attr('type');
+		tmp = elem.attr('type') || elem.attr('data-type');
 		if(tmp){
 			src.type = tmp;
 			src.container = $.trim(tmp.split(';')[0]);
@@ -612,6 +611,11 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				}
 			}
 		}
+		
+		if(!src.container){
+			$(elem).attr('data-wsrecheckmimetype', '');
+		}
+		
 		tmp = elem.attr('media');
 		if(tmp){
 			src.media = tmp;
@@ -845,15 +849,18 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	
 	var handleThird = (function(){
 		var requested;
+		var readyType = hasSwf ? swfType : 'mediaelement-yt';
 		return function( mediaElem, ret, data ){
+			//readd to ready
 			
-			webshims.ready(hasSwf ? swfType : 'mediaelement-yt', function(){
-				if(mediaelement.createSWF){
+			
+			webshims.ready(readyType, function(){
+				if(mediaelement.createSWF && $(mediaElem).parent()[0]){
 					mediaelement.createSWF( mediaElem, ret, data );
 				} else if(!requested) {
 					requested = true;
 					loadThird();
-					//readd to ready
+					
 					handleThird( mediaElem, ret, data );
 				}
 			});
@@ -995,6 +1002,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 							if(hasNative && (!data || data.isActive == 'html5') && supLoad.prop._supvalue){
 								supLoad.prop._supvalue.apply(this, arguments);
 							}
+							$(this).triggerHandler('wsmediareload');
 						}
 					}
 				});
@@ -1134,8 +1142,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	}
 	webshims.ready('track', loadTrackUi);
 });
-})(Modernizr, webshims);
-webshims.register('track', function($, webshims, window, document, undefined){
+})(Modernizr, webshims);;webshims.register('track', function($, webshims, window, document, undefined){
 	"use strict";
 	var mediaelement = webshims.mediaelement;
 	var id = new Date().getTime();
@@ -1455,9 +1462,9 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		var loadEvents = 'play playing updatetrackdisplay';
 		var obj = trackData.track;
 		var load = function(){
-			var error, ajax, src;
+			var error, ajax, src, createAjax;
 			if(obj.mode != 'disabled' && $.attr(track, 'src') && (src = $.prop(track, 'src'))){
-				$(mediaelem).unbind(loadEvents, load);
+				$(mediaelem).off(loadEvents, load);
 				if(!trackData.readyState){
 					error = function(){
 						trackData.readyState = 3;
@@ -1469,26 +1476,34 @@ webshims.register('track', function($, webshims, window, document, undefined){
 					try {
 						obj.cues = mediaelement.createCueList();
 						obj.activeCues = obj.shimActiveCues = obj._shimActiveCues = mediaelement.createCueList();
-						ajax = $.ajax({
-							dataType: 'text',
-							url: src,
-							success: function(text){
-								if(ajax.getResponseHeader('content-type') != 'text/vtt'){
-									webshims.error('set the mime-type of your WebVTT files to text/vtt. see: http://dev.w3.org/html5/webvtt/#text/vtt');
-								}
-								mediaelement.parseCaptions(text, obj, function(cues){
-									if(cues && 'length' in cues){
-										trackData.readyState = 2;
-										$(track).triggerHandler('load');
-										$(mediaelem).triggerHandler('updatetrackdisplay');
-									} else {
-										error();
+						createAjax = function(){
+							ajax = $.ajax({
+								dataType: 'text',
+								url: src,
+								success: function(text){
+									if(ajax.getResponseHeader('content-type') != 'text/vtt'){
+										webshims.error('set the mime-type of your WebVTT files to text/vtt. see: http://dev.w3.org/html5/webvtt/#text/vtt');
 									}
-								});
-								
-							},
-							error: error
-						});
+									mediaelement.parseCaptions(text, obj, function(cues){
+										if(cues && 'length' in cues){
+											trackData.readyState = 2;
+											$(track).triggerHandler('load');
+											$(mediaelem).triggerHandler('updatetrackdisplay');
+										} else {
+											error();
+										}
+									});
+									
+								},
+								error: error
+							});
+						};
+						if($.ajax){
+							createAjax();
+						} else {
+							webshims.ready('$ajax', createAjax);
+							webshims.loader.loadList(['$ajax']);
+						}
 					} catch(er){
 						error();
 						webshims.error(er);
@@ -1501,7 +1516,7 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		obj._shimActiveCues = null;
 		obj.activeCues = null;
 		obj.cues = null;
-		$(mediaelem).unbind(loadEvents, load);
+		$(mediaelem).off(loadEvents, load);
 		$(mediaelem).on(loadEvents, load);
 		if(_default){
 			obj.mode = showTracks[obj.kind] ? 'showing' : 'hidden';
@@ -1920,8 +1935,8 @@ modified for webshims
 		}
 	}, 'prop');
 
-	
-	$(document).on('emptied ended updatetracklist', function(e){
+	//wsmediareload
+	var thUpdateList = function(e){
 		if($(e.target).is('audio, video')){
 			var baseData = webshims.data(e.target, 'mediaelementBase');
 			if(baseData){
@@ -1931,7 +1946,7 @@ modified for webshims
 				}, 0);
 			}
 		}
-	});
+	};
 	
 	var getNativeReadyState = function(trackElem, textTrack){
 		return textTrack.readyState || trackElem.readyState;
@@ -1971,6 +1986,7 @@ modified for webshims
 			.each(function(){
 				updateMediaTrackList.call(this);
 			})
+			.on('emptied updatetracklist wsmediareload', thUpdateList)
 			.each(function(){
 				if(Modernizr.track){
 					var shimedTextTracks = $.prop(this, 'textTracks');

@@ -449,8 +449,7 @@ var swfmini = function() {
 		}
 	};
 }();
-
-(function(Modernizr, webshims){
+;(function(Modernizr, webshims){
 	"use strict";
 	var $ = webshims.$;
 	var hasNative = Modernizr.audio && Modernizr.video;
@@ -495,7 +494,7 @@ var swfmini = function() {
 			var switchOptions = function(e){
 				var media, error, parent;
 				if(!options.preferFlash && 
-				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source:last', parent)[0] == e.target)) && 
+				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source', parent).last()[0] == e.target)) && 
 				(media = $(e.target).closest('audio, video')) && (error = media.prop('error')) && !noSwitch[error.code]
 				){
 					
@@ -588,7 +587,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			src.server = tmp;
 		}
 		
-		tmp = elem.attr('type');
+		tmp = elem.attr('type') || elem.attr('data-type');
 		if(tmp){
 			src.type = tmp;
 			src.container = $.trim(tmp.split(';')[0]);
@@ -612,6 +611,11 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				}
 			}
 		}
+		
+		if(!src.container){
+			$(elem).attr('data-wsrecheckmimetype', '');
+		}
+		
 		tmp = elem.attr('media');
 		if(tmp){
 			src.media = tmp;
@@ -845,15 +849,18 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	
 	var handleThird = (function(){
 		var requested;
+		var readyType = hasSwf ? swfType : 'mediaelement-yt';
 		return function( mediaElem, ret, data ){
+			//readd to ready
 			
-			webshims.ready(hasSwf ? swfType : 'mediaelement-yt', function(){
-				if(mediaelement.createSWF){
+			
+			webshims.ready(readyType, function(){
+				if(mediaelement.createSWF && $(mediaElem).parent()[0]){
 					mediaelement.createSWF( mediaElem, ret, data );
 				} else if(!requested) {
 					requested = true;
 					loadThird();
-					//readd to ready
+					
 					handleThird( mediaElem, ret, data );
 				}
 			});
@@ -995,6 +1002,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 							if(hasNative && (!data || data.isActive == 'html5') && supLoad.prop._supvalue){
 								supLoad.prop._supvalue.apply(this, arguments);
 							}
+							$(this).triggerHandler('wsmediareload');
 						}
 					}
 				});

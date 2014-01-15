@@ -1,3 +1,51 @@
+Release 1.12.0
+----------
+
+- new dir structure for bower (:root/js-webshim is the new folder for build js. :root/demos/js-webshim will be removed with next realease)
+- all locale js files are fetched using XHR (use setOptions('ajax', {crossDomain: true}) to disable)
+- transfer JS options for many pickers to CSS (i.e.: showWeek: true -> .input-picker .ws-week {display: table-cell})
+- fixed fieldset:disabled implementation (wow, each version of IE behaves different + IE11 is worse than IE10!)
+- improved styles for type=range, datalist and progress element
+- most widgets are em scalable (base font is 13px)
+- fixed data-errormessage attribute
+- added grunt task to optimize polyfiller.js (-> grunt-tasks/optimize-polyfiller.js)
+- update flashcanvas fixes a security issue (with php)
+- a11y improvements
+
+Release 1.11.5 and 1.11.6
+----------
+
+- improved support for video width=auto/height=auto in combination with min-/max- / width/height
+- full support for jQuery mobile 1.3+
+- update es5-shim v.2.1.0
+- update Modernizr 2.7.1
+- youtube qualitity settings for Flash and iframe API (using ``vq`` parameter on src (/vq\=(small|medium|large|hd720|hd1080|highres)/i)
+- updated dutch language file (thx to @espaan)
+- a lot of undocumented option tweaks
+- implemented/polyfilled setSelectionRange/selectionStart/selectionEnd
+- added fieldset[disabled]/:disabled support (buggy, will be fixed with next release)
+
+Release 1.11.3
+----------
+
+- fixed regression error for time picker (i.e: t.time is undefined)
+- added full support for form reset
+- allow partial UI replacement (replaceUI can take an object instead of a boolean)
+- fix change/input event in capable browsers on type="range" (fixRangeChange option)
+- added czech and br language
+- added support for fieldset:invalid (but not polyfilled in capable browsers without support i.e.: Chrome)
+
+
+Release 1.11.2
+----------
+
+- split form-shims into two files (improves network performance for iOS/Safari7)
+- added getTrackById and onchange event to TrackList Object
+- improved stepUp/stepDown method
+- added touch support to input[type="range"]
+- fixed time picker
+- added support for defaultValue to all input widgets 
+
 Release 1.11.1
 ----------
 

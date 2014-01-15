@@ -1,6 +1,9 @@
 webshims.register('form-shim-extend2', function($, webshims, window, document, undefined, options){
 "use strict";
 var emptyJ = $([]);
+var isNumber = function(string){
+    return (typeof string == 'number' || (string && string == string * 1));
+};
 var getGroupElements = function(elem){
 	elem = $(elem);
 	var name;
@@ -22,6 +25,8 @@ var getGroupElements = function(elem){
 	}
 	return ret;
 };
+//support getSetAttribute
+var supportGetSetAttribute = !(('getSetAttribute' in  $.support) && !$.support.getSetAttribute);
 //submitbubbles for IE6-IE8
 var supportSubmitBubbles = !('submitBubbles' in $.support) || $.support.submitBubbles;
 var addSubmitBubbles = function(form){
@@ -83,7 +88,7 @@ if( !('maxLength' in document.createElement('textarea')) ){
 		};
 		var remove = function(){
 			clearTimeout(timer);
-			lastElement.unbind('.maxlengthconstraint');
+			lastElement.off('.maxlengthconstraint');
 		};
 		return function(element, maxLength){
 			remove();
@@ -163,7 +168,7 @@ if( !('maxLength' in document.createElement('textarea')) ){
 	});
 } 
 
-if(!$.support.getSetAttribute && $('<form novalidate></form>').attr('novalidate') == null){
+if(!supportGetSetAttribute && $('<form novalidate></form>').attr('novalidate') == null){
 	webshims.defineNodeNameProperty('form', 'novalidate', {
 		attr: {
 			set: function(val){
@@ -178,40 +183,133 @@ if(!$.support.getSetAttribute && $('<form novalidate></form>').attr('novalidate'
 }
 
 
-if(Modernizr.formattribute === false || !Modernizr.fieldsetdisabled){
+if(!Modernizr.formattribute || !Modernizr.fieldsetdisabled || !Modernizr.fieldsetelements){
 	(function(){
-
-		(function(prop, undefined){
-			$.prop = function(elem, name, value){
-				var ret;
-				if(elem && elem.nodeType == 1 && value === undefined && $.nodeName(elem, 'form') && elem.id){
-					ret = document.getElementsByName(name);
-					if(!ret || !ret.length){
-						ret = document.getElementById(name);
+		if(!Modernizr.fieldsetdisabled){
+			var isFieldsetGroup = /^(?:fieldset)$/i;
+			var disableElementsSel = 'input, textarea, select, button';
+			$.extend($.expr[":"], {
+				"enabled": function( elem ) {
+					return elem.disabled === false || (isFieldsetGroup.test(elem.nodeName) && webshims.contentAttr(elem, 'disabled') == null && !$(elem).is('fieldset[disabled] *')) ;
+				},
+		
+				"disabled": function( elem ) {
+					return elem.disabled === true || (isFieldsetGroup.test(elem.nodeName) && (webshims.contentAttr(elem, 'disabled') != null || $(elem).is('fieldset[disabled] *')));
+				}
+			});
+			
+			
+			var groupControl = {
+				getElements: function(group){
+					$(disableElementsSel, group).each(groupControl.disable);
+				},
+				disable: function(){
+					if(!this.disabled){
+						webshims.data(this, 'groupedisabled', true);
+						this.disabled = true;
 					}
-					if(ret){
-						ret = $(ret).filter(function(){
-							return $.prop(this, 'form') == elem;
-						}).get();
-						if(ret.length){
-							return ret.length == 1 ? ret[0] : ret;
-						}
+				},
+				enable: function(){
+					if(this.disabled && webshims.data(this, 'groupedisabled')){
+						webshims.data(this, 'groupedisabled', false);
+						this.disabled = false;
 					}
 				}
-				return prop.apply(this, arguments);
 			};
-		})($.prop, undefined);
-		
-		var removeAddedElements = function(form){
-			var elements = $.data(form, 'webshimsAddedElements');
-			if(elements){
-				elements.remove();
-				$.removeData(form, 'webshimsAddedElements');
-			}
-		};
+			
+			$(window).on('unload', function(){
+				$(disableElementsSel).each(groupControl.enable);
+			});
+			
+			webshims.defineNodeNamesBooleanProperty(['fieldset'], 'disabled', {
+				set: function(value){
+					
+					if(value){
+						$(disableElementsSel, this).each(groupControl.disable);
+					} else if(!$(this).is('fieldset[disabled] *')){
+						var nested = $('fieldset[disabled]', this);
+						var elements = $(disableElementsSel, this);
+						
+						if(nested.length){
+							elements = elements.not('fieldset[disabled] *');
+						}
+						
+						elements.each(groupControl.enable);
+					}
+				},
+				initAttr: true,
+				useContentAttribute: true
+			});
+			
+			['input', 'textarea', 'select', 'button'].forEach(function(nodeName){
+				var desc = webshims.defineNodeNameProperty(nodeName, 'disabled', {
+					prop: {
+						set: function(value){
+							if(value){
+								webshims.data(this, 'groupedisabled', false);
+								desc.prop._supset.call(this, value);
+							} else if($(this).is('fieldset[disabled] *')){
+								webshims.data(this, 'groupedisabled', true);
+								desc.prop._supset.call(this, true);
+							} else {
+								webshims.data(this, 'groupedisabled', false);
+								desc.prop._supset.call(this, value);
+							}
+						},
+						get: function(){
+							var ret = desc.prop._supget.call(this);
+							return ret ? !webshims.data(this, 'groupedisabled') : ret;
+						}
+					},
+					removeAttr: {
+						value: function(){
+							desc.set.call(this, false);
+						}
+					} 
+				});
+			});
+			
+			webshims.addReady(function(context){
+				
+				$(context)
+					.filter('fieldset[disabled], fieldset[disabled] *')
+					.find(disableElementsSel)
+					.each(groupControl.disable)
+				;
+			});
+		}
 		
 		
 		if(!Modernizr.formattribute){
+			(function(prop, undefined){
+				$.prop = function(elem, name, value){
+					var ret;
+					if(elem && elem.nodeType == 1 && value === undefined && $.nodeName(elem, 'form') && elem.id){
+						ret = document.getElementsByName(name);
+						if(!ret || !ret.length){
+							ret = document.getElementById(name);
+						}
+						if(ret){
+							ret = $(ret).filter(function(){
+								return $.prop(this, 'form') == elem;
+							}).get();
+							if(ret.length){
+								return ret.length == 1 ? ret[0] : ret;
+							}
+						}
+					}
+					return prop.apply(this, arguments);
+				};
+			})($.prop, undefined);
+			
+			var removeAddedElements = function(form){
+				var elements = $.data(form, 'webshimsAddedElements');
+				if(elements){
+					elements.remove();
+					$.removeData(form, 'webshimsAddedElements');
+				}
+			};
+		
 			webshims.defineNodeNamesProperty(['input', 'textarea', 'select', 'button', 'fieldset'], 'form', {
 				prop: {
 					get: function(){
@@ -308,9 +406,37 @@ if(Modernizr.formattribute === false || !Modernizr.fieldsetdisabled){
 					}
 				});
 			});
+			
+			if(!$.fn.finish && parseFloat($.fn.jquery, 10) < 1.9){
+				var rCRLF = /\r?\n/g,
+					rinput = /^(?:color|date|datetime|datetime-local|email|hidden|month|number|password|range|search|tel|text|time|url|week)$/i,
+					rselectTextarea = /^(?:select|textarea)/i;
+				$.fn.serializeArray = function() {
+						return this.map(function(){
+							var elements = $.prop(this, 'elements');
+							return elements ? $.makeArray( elements ) : this;
+						})
+						.filter(function(){
+							return this.name && !$(this).is(':disabled') &&
+								( this.checked || rselectTextarea.test( this.nodeName ) ||
+									rinput.test( this.type ) );
+						})
+						.map(function( i, elem ){
+							var val = $( this ).val();
+				
+							return val == null ?
+								null :
+								$.isArray( val ) ?
+									$.map( val, function( val, i ){
+										return { name: elem.name, value: val.replace( rCRLF, "\r\n" ) };
+									}) :
+									{ name: elem.name, value: val.replace( rCRLF, "\r\n" ) };
+						}).get();
+					};
+			}
 		}
 		
-		if(!Modernizr.fieldsetdisabled){
+		if(!Modernizr.fieldsetelements){
 			webshims.defineNodeNamesProperty(['fieldset'], 'elements', {
 				prop: {
 					get: function(){
@@ -320,34 +446,6 @@ if(Modernizr.formattribute === false || !Modernizr.fieldsetdisabled){
 					writeable: false
 				}
 			});
-		}
-		
-		if(!$.fn.finish && parseFloat($.fn.jquery, 10) < 1.9){
-			var rCRLF = /\r?\n/g,
-				rinput = /^(?:color|date|datetime|datetime-local|email|hidden|month|number|password|range|search|tel|text|time|url|week)$/i,
-				rselectTextarea = /^(?:select|textarea)/i;
-			$.fn.serializeArray = function() {
-					return this.map(function(){
-						var elements = $.prop(this, 'elements');
-						return elements ? $.makeArray( elements ) : this;
-					})
-					.filter(function(){
-						return this.name && !this.disabled &&
-							( this.checked || rselectTextarea.test( this.nodeName ) ||
-								rinput.test( this.type ) );
-					})
-					.map(function( i, elem ){
-						var val = $( this ).val();
-			
-						return val == null ?
-							null :
-							$.isArray( val ) ?
-								$.map( val, function( val, i ){
-									return { name: elem.name, value: val.replace( rCRLF, "\r\n" ) };
-								}) :
-								{ name: elem.name, value: val.replace( rCRLF, "\r\n" ) };
-					}).get();
-				};
 		}
 		
 	})();
@@ -576,7 +674,120 @@ try {
 	})();
 }
 
+if(!('setSelectionRange' in document.createElement('input'))){
+	(function(){
+		var getSelection = function(elem, getStart){
+			var range, value, normalizedValue, textInputRange, len, endRange;
+			var start = 0;
+			var end = 0;
+			if (document.selection && (range = document.selection.createRange()) && range.parentElement() == elem) {
+				value = $.prop(elem, 'value');
+				len = value.length;
+				normalizedValue = value.replace(/\r\n/g, "\n");
+	
+				textInputRange = elem.createTextRange();
+				textInputRange.moveToBookmark(range.getBookmark());
+	
+				
+				endRange = elem.createTextRange();
+				endRange.collapse(false);
+	
+				if (textInputRange.compareEndPoints("StartToEnd", endRange) > -1) {
+					start = end = len;
+				} else {
+					if(getStart){
+						start = -textInputRange.moveStart("character", -len);
+						start += normalizedValue.slice(0, start).split("\n").length - 1;
+					} else {
+						if (textInputRange.compareEndPoints("EndToEnd", endRange) > -1) {
+							end = len;
+						} else {
+							end = -textInputRange.moveEnd("character", -len);
+							end += normalizedValue.slice(0, end).split("\n").length - 1;
+						}
+					}
+	
+				}
+			}
+			return {
+				start: start,
+				end: end
+			};
+		};
+		
+		['input', 'textarea'].forEach(function(name){
+			var isTextarea = name == 'textarea';
+			//email?
+			var allowedTypes = {text: 1, search: 1, url: 1, tel: 1, password: 1, email: 1};
+			var error = 'InvalidStateError: An attempt was made to use an object that is not, or is no longer, usable. selection not allowed on this type';
+			webshims.defineNodeNameProperties(name, {
+				selectionStart: {
+					get: function(){
+						if(isTextarea || allowedTypes[$.prop(this, 'type')]){
+							return getSelection(this, true).start;
+						}
+						webshims.error(error);
+					},
+					set: function(v){
+						if(this.createTextRange && (isTextarea || allowedTypes[$.prop(this, 'type')])){
+							var range = this.createTextRange();
+							range.collapse(true);
+							range.moveStart('character', v);
+							range.moveEnd('character', $.prop(this, 'selectionEnd'));
+							if($(this).is(':focus')){
+								range.select();
+							}
+						} else {
+							webshims.error(error);
+						}
+					}
+				},
+				selectionEnd: {
+					get: function(){
+						if(isTextarea || allowedTypes[$.prop(this, 'type')]){
+							return getSelection(this).end;
+						}
+						webshims.error(error);
+					},
+					set: function(v){
+						if(this.createTextRange && (isTextarea || allowedTypes[$.prop(this, 'type')])){
+							var range = this.createTextRange();
+							var start;
+							range.collapse(true);
+							start = getSelection(this, true).start;
+							range.moveStart('character', start);
+							range.moveEnd('character', v - start);
+							if($(this).is(':focus')){
+								range.select();
+							}
+						} else {
+							webshims.error(error);
+						}
+					}
+				},
+				setSelectionRange: {
+					value: function(start, end, dir){
+						if(this.createTextRange && (isTextarea || allowedTypes[$.prop(this, 'type')])){
+							var range = this.createTextRange();
+							range.collapse(true);
+							range.moveStart('character', start);
+							range.moveEnd('character', end - start);
+							if($(this).is(':focus')){
+								range.select();
+							}
+						} else {
+							webshims.error(error);
+						}
+					}
+				}
+			}, 'prop');
+		});
+		
+	})();
+}
+
 (function(){
+	if(options.noPlaceholderPolyfill){return;}
 	var bustedPlaceholder;
 	Modernizr.textareaPlaceholder = !!('placeholder' in $('<textarea />')[0]);
 	if(Modernizr.input.placeholder && options.overridePlaceholder){
@@ -611,24 +822,14 @@ try {
 	var isOver = (webshims.cfg.forms.placeholderType == 'over');
 	var isResponsive = (webshims.cfg.forms.responsivePlaceholder);
 	var polyfillElements = ['textarea'];
-	var debug = webshims.debug !== false;
 	if(!Modernizr.input.placeholder || bustedPlaceholder){
 		polyfillElements.push('input');
 	}
 	
 	var setSelection = function(elem){
 		try {
-			if(elem.setSelectionRange){
-				elem.setSelectionRange(0, 0);
-				return true;
-			} else if(elem.createTextRange){
-				var range = elem.createTextRange();
-				range.collapse(true);
-				range.moveEnd('character', 0);
-				range.moveStart('character', 0);
-				range.select();
-				return true;
-			}
+			$(elem).setSelectionRange(0,0);
+			return true;
 		} catch(er){}
 	};
 	
@@ -650,7 +851,7 @@ try {
 								elem.value = $.prop(elem, 'value');
 								data.box.removeClass('placeholder-visible');
 								clearTimeout(selectTimer);
-								$(elem).unbind('.placeholderremove');
+								$(elem).off('.placeholderremove');
 							},
 							'mousedown.placeholderremove drag.placeholderremove select.placeholderremove': function(e){
 								setSelection(elem);
@@ -661,7 +862,7 @@ try {
 							},
 							'blur.placeholderremove': function(){
 								clearTimeout(selectTimer);
-								$(elem).unbind('.placeholderremove');
+								$(elem).off('.placeholderremove');
 							}
 						})
 					;
@@ -676,10 +877,10 @@ try {
 						'keydown.placeholderremove keypress.placeholderremove paste.placeholderremove input.placeholderremove': function(e){
 							if(e && (e.keyCode == 17 || e.keyCode == 16)){return;}
 							data.box.removeClass('placeholder-visible');
-							$(elem).unbind('.placeholderremove');
+							$(elem).off('.placeholderremove');
 						},
 						'blur.placeholderremove': function(){
-							$(elem).unbind('.placeholderremove');
+							$(elem).off('.placeholderremove');
 						}
 					})
 				;
@@ -707,7 +908,7 @@ try {
 				placeholderTxt = $.attr(elem, 'placeholder') || '';
 			}
 			
-			$(elem).unbind('.placeholderremove');
+			$(elem).off('.placeholderremove');
 			
 			if(value === false){
 				value = $.prop(elem, 'value');
@@ -759,7 +960,6 @@ try {
 				create: function(elem){
 					var data = $.data(elem, 'placeHolder');
 					var form;
-					var responsiveElem;
 					if(data){return data;}
 					data = $.data(elem, 'placeHolder', {});
 					
@@ -779,13 +979,12 @@ try {
 					if(elem.type == 'password' || isOver){
 						data.text = createPlaceholder(elem);
 						if(isResponsive || $(elem).is('.responsive-width') || (elem.currentStyle || {width: ''}).width.indexOf('%') != -1){
-							responsiveElem = true;
 							data.box = data.text;
 						} else {
-							data.box = $(elem)
-								.wrap('<span class="placeholder-box placeholder-box-'+ (elem.nodeName || '').toLowerCase() +' placeholder-box-'+$.css(elem, 'float')+'" />')
-								.parent()
+							data.box = $('<span class="placeholder-box placeholder-box-'+ (elem.nodeName || '').toLowerCase() +' placeholder-box-'+$.css(elem, 'float')+'" />')
+								.insertAfter(elem)
 							;
+							data.box.append(elem);
 						}
 						data.text
 							.insertAfter(elem)
@@ -1019,7 +1218,6 @@ try {
 					
 					//pro forma
 					,color: 1
-					//,range: 1
 				},
 				observe = function(input){
 					var timer,
@@ -1041,7 +1239,7 @@ try {
 							extraTimer = setTimeout(trigger, 9);
 						},
 						unbind = function(){
-							input.unbind('focusout', unbind).unbind('keyup keypress keydown paste cut', extraTest).unbind('input change updateInput', trigger);
+							input.off('focusout', unbind).off('keyup keypress keydown paste cut', extraTest).off('input change updateInput triggerinput', trigger);
 							clearInterval(timer);
 							setTimeout(function(){
 								trigger();
@@ -1057,7 +1255,7 @@ try {
 					input.on({
 						'keyup keypress keydown paste cut': extraTest,
 						focusout: unbind,
-						'input updateInput change': trigger
+						'input updateInput change triggerinput': trigger
 					});
 				}
 			;
